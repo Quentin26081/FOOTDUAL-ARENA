@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>FOOTDUAL — POV Subsoccer</title>
+<style>
+:root{--o:#ff6500;--dark:#090909;--green:#176b3b}
+*{box-sizing:border-box}
+body{margin:0;background:#090909;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;min-height:100vh;display:flex;justify-content:center}
+main{width:min(100%,520px);padding:12px 12px 18px}
+header{text-align:center;padding:7px 0 12px}
+.logo{font-size:30px;font-weight:1000;font-style:italic;letter-spacing:-1.8px}.logo span{color:var(--o)}
+.tag{font-size:9px;letter-spacing:3px;color:#ddd}
+.hud{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 9px}
+.pill{font-size:12px;background:#1b1b1b;border:1px solid #393939;border-radius:999px;padding:7px 10px}
+.pill b{color:var(--o)}
+.stage{position:relative;border:2px solid #343434;border-radius:15px;overflow:hidden;background:#0c0c0c;box-shadow:0 8px 30px #0008}
+canvas{display:block;width:100%;height:auto;aspect-ratio:390/650;touch-action:none}
+.overlay{position:absolute;inset:0;z-index:10;pointer-events:auto;display:flex;align-items:center;justify-content:center;background:#0009;text-align:center;padding:24px}
+.overlay.hidden{display:none}
+.overlay-card{position:relative;z-index:11;pointer-events:auto;touch-action:manipulation;background:#101010ed;border:1px solid #ff6500;border-radius:16px;padding:20px 16px;max-width:300px}
+.overlay-card h2{margin:0 0 8px;font-size:24px}.overlay-card p{font-size:13px;line-height:1.45;color:#ccc}
+button{position:relative;z-index:12;pointer-events:auto;touch-action:manipulation;-webkit-appearance:none;appearance:none;border:1px solid #4b4b4b;background:#242424;color:#fff;font-weight:800;border-radius:12px;padding:13px 10px;font-size:14px;touch-action:manipulation}
+button:active{transform:scale(.98);background:#7c3300;border-color:var(--o)}
+.primary{background:var(--o);border-color:#ff8c42;color:#111}
+.controls{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:8px;margin-top:10px}
+.controls button{min-height:62px}
+.controls small{display:block;font-size:10px;font-weight:600;opacity:.8;margin-top:3px}
+.message{text-align:center;color:#ff9955;font-size:12px;font-weight:800;min-height:20px;padding:7px 0 0}
+.instructions{font-size:11px;line-height:1.45;color:#999;text-align:center;margin:5px 3px}
+footer{text-align:center;font-size:10px;color:#666;margin-top:8px}
+</style>
+</head>
+<body><main>
+<header><div class="logo">FOOT<span>DUAL</span></div><div class="tag">LE FOOT SE JOUE À DEUX</div></header>
+<div class="hud"><div class="pill">TOI <b id="scoreYou">0</b> — <b id="scoreCpu">0</b> CPU</div><div class="pill">⏱ <b id="time">60</b>s</div><div class="pill">1ʳᵉ PERSONNE</div></div>
+<div class="stage">
+<canvas id="game" width="390" height="650" aria-label="Jeu FOOTDUAL en vue subjective"></canvas>
+<div class="overlay" id="overlay"><div class="overlay-card"><h2>Prêt pour le duel ?</h2><p>Tu regardes le terrain depuis ta place. Tes jambes sont au premier plan. Pendant le match, touche directement ta jambe gauche ou droite dans l'image pour frapper le ballon. Tu peux aussi utiliser les boutons en dessous. Marque en passant entre les jambes adverses !</p><button class="primary" id="start">JOUER</button></div></div>
+</div>
+<div class="message" id="message">POV : tu es assis devant la table Subsoccer.</div>
+<div class="controls">
+<button id="left">👟 PIED GAUCHE<small>Frappe à gauche</small></button>
+<button id="kick" class="primary">⚡ TIR !<small>Frappe au centre</small></button>
+<button id="right">PIED DROIT 👟<small>Frappe à droite</small></button>
+</div>
+<p class="instructions">Touche directement la jambe gauche ou droite dessinée en bas du terrain pour tirer. Tu peux aussi toucher le ballon ou utiliser les boutons. Vise l'ouverture entre les jambes adverses.</p>
+<footer>FOOTDUAL SUBSOCCER ARENA · Prototype POV V0.4</footer>
+</main>
+<script>
+(()=>{
+const c=document.getElementById('game'),x=c.getContext('2d'),W=390,H=650;
+const $=id=>document.getElementById(id);
+let active=false,over=true,remaining=60,last=0,playerScore=0,cpuScore=0,flash=0;
+let ball={x:195,y:420,vx:0,vy:0,r:12,depth:0.65};
+let legs={left:0,right:0,cpuL:0,cpuR:0};
+let cpuTarget=195,aiCooldown=1.2;
+function resetBall(towardPlayer=false){ball={x:195+(Math.random()-.5)*25,y:towardPlayer?245:420,vx:(Math.random()-.5)*28,vy:towardPlayer?150:-45,r:12,depth:.65};}
+function say(t){$('message').textContent=t;}
+function start(){active=true;over=false;remaining=60;playerScore=cpuScore=0;$('scoreYou').textContent=0;$('scoreCpu').textContent=0;$('time').textContent=60;$('overlay').classList.add('hidden');resetBall();say('À toi de jouer !');}
+function score(who){if(who==='you'){playerScore++;$('scoreYou').textContent=playerScore;say('BUUUT FOOTDUAL !');}else{cpuScore++;$('scoreCpu').textContent=cpuScore;say('But du CPU !');}
+flash=0.45; if(playerScore>=5||cpuScore>=5||remaining<=0){active=false;over=true;$('overlay').classList.remove('hidden');$('overlay').querySelector('h2').textContent=playerScore>cpuScore?'VICTOIRE FOOTDUAL !':playerScore<cpuScore?'LE CPU GAGNE':'ÉGALITÉ !';$('overlay').querySelector('p').textContent=`Score final : ${playerScore} – ${cpuScore}. Prêt pour une revanche ?`;$('start').textContent='REJOUER';}else resetBall(who==='you');}
+function kick(side){
+ if(!active)return;
+ const near=ball.y>300;
+ if(!near){say('Le ballon est trop loin ! Attends qu’il revienne.');return;}
+ legs[side==='left'?'left':'right']=1;
+ const target=side==='left'?125:265;
+ const dx=target-ball.x;
+ ball.vx=dx*1.65+(side==='left'?-35:35);
+ ball.vy=-Math.max(250,Math.min(410,(ball.y-190)*1.35));
+ ball.depth=.6;
+ say(side==='center'?'TIR AU CENTRE !':side==='left'?'FRAPPE DU PIED GAUCHE !':'FRAPPE DU PIED DROIT !');
+}
+function launchFromTouch(e){ if(e){e.preventDefault();e.stopPropagation();} if(!active) start(); }
+$('start').onclick=launchFromTouch;
+$('start').addEventListener('touchend',launchFromTouch,{passive:false});
+$('start').addEventListener('pointerup',e=>{if(e.pointerType==='touch')launchFromTouch(e);},{passive:false});
+$('left').addEventListener('pointerdown',e=>{e.preventDefault();kick('left')});
+$('right').addEventListener('pointerdown',e=>{e.preventDefault();kick('right')});
+$('kick').addEventListener('pointerdown',e=>{e.preventDefault();kick('center')});
+function polygon(points,fill,stroke=null,lw=1){x.beginPath();x.moveTo(points[0][0],points[0][1]);for(let i=1;i<points.length;i++)x.lineTo(points[i][0],points[i][1]);x.closePath();x.fillStyle=fill;x.fill();if(stroke){x.strokeStyle=stroke;x.lineWidth=lw;x.stroke();}}
+function drawLegs(cx,y,scale,spread,skin,shorts,moveL=0,moveR=0,own=false){
+ // hips / shorts
+ x.save();x.translate(cx,y);x.scale(scale,scale);
+ polygon([[-spread-30,-7],[-spread+14,-7],[-spread+20,27],[-spread-22,35],[-spread-35,17]],shorts);
+ polygon([[spread-14,-7],[spread+30,-7],[spread+35,17],[spread+22,35],[spread-20,27]],shorts);
+ // legs taper down toward feet
+ const drawOne=(side,mv)=>{
+   x.save();x.translate(side*(spread-2),15);x.rotate(mv*0.24*side);
+   polygon([[-11,0],[11,0],[14,58],[8,95],[-8,95],[-14,58]],skin,'#1a1a1a',1);
+   // sock
+   polygon([[-9,68],[9,68],[8,91],[-8,91]],own?'#f5f5f5':'#262626');
+   // shoe
+   x.beginPath();x.ellipse(0,101,18,10,side*-.08,0,Math.PI*2);x.fillStyle=own?'#fff':'#181818';x.fill();x.strokeStyle=own?'#aaa':'#ff6500';x.lineWidth=2;x.stroke();
+   x.beginPath();x.moveTo(-8,99);x.lineTo(7,99);x.strokeStyle=own?'#777':'#ff6500';x.lineWidth=1.5;x.stroke();
+   x.restore();
+ };
+ drawOne(-1,moveL);drawOne(1,moveR);
+ x.restore();
+}
+function drawBall(){
+ const depth=Math.max(.35,Math.min(1.2,(H-ball.y)/450+0.28));
+ const r=8+depth*8;
+ x.beginPath();x.ellipse(ball.x+3,ball.y+r*.55,r*1.1,r*.55,0,0,Math.PI*2);x.fillStyle='#0008';x.fill();
+ x.beginPath();x.arc(ball.x,ball.y,r,0,Math.PI*2);x.fillStyle='#ff3038';x.fill();x.strokeStyle='#f8f8f8';x.lineWidth=2;x.stroke();
+ x.beginPath();x.moveTo(ball.x-r*.65,ball.y-r*.15);x.lineTo(ball.x+r*.65,ball.y+r*.15);x.moveTo(ball.x-r*.25,ball.y-r*.75);x.lineTo(ball.x-r*.05,ball.y+r*.75);x.strokeStyle='#fff';x.lineWidth=2;x.stroke();
+}
+function draw(){
+ x.clearRect(0,0,W,H);x.fillStyle='#101010';x.fillRect(0,0,W,H);
+ // perspective turf
+ polygon([[110,110],[280,110],[390,650],[0,650]],'#176b3b');
+ // turf bands
+ for(let i=0;i<7;i++){const y1=115+i*76,y2=y1+76;const left1=110-(y1-110)*.205,right1=280+(y1-110)*.205,left2=110-(y2-110)*.205,right2=280+(y2-110)*.205;polygon([[left1,y1],[right1,y1],[right2,y2],[left2,y2]],i%2?'#1a7541':'#176b3b');}
+ // field lines perspective
+ x.strokeStyle='#e7f2dc';x.lineWidth=3;
+ x.beginPath();x.moveTo(110,110);x.lineTo(0,650);x.moveTo(280,110);x.lineTo(390,650);x.moveTo(110,110);x.lineTo(280,110);x.stroke();
+ x.beginPath();x.moveTo(70,300);x.lineTo(320,300);x.stroke();
+ x.beginPath();x.ellipse(195,300,39,15,0,0,Math.PI*2);x.stroke();
+ // mesh side rails and net grid
+ x.strokeStyle='#161616';x.lineWidth=9;x.beginPath();x.moveTo(45,130);x.lineTo(0,650);x.moveTo(345,130);x.lineTo(390,650);x.stroke();
+ x.strokeStyle='#ffffff25';x.lineWidth=1;
+ for(let yy=145;yy<640;yy+=25){let spread=(yy-110)*.2;x.beginPath();x.moveTo(110-spread,yy);x.lineTo(280+spread,yy);x.stroke();}
+ for(let xx=15;xx<390;xx+=27){x.beginPath();x.moveTo(xx,160);x.lineTo(xx+(xx-195)*.18,650);x.stroke();}
+ // far opponent legs, legs point toward centre
+ drawLegs(195,125,.63,48,'#c58a66','#171717',legs.cpuL,legs.cpuR,false);
+ // opponent goal opening between feet
+ x.strokeStyle='#ff6500';x.lineWidth=3;x.beginPath();x.moveTo(151,190);x.lineTo(239,190);x.stroke();
+ // ball
+ drawBall();
+ // own legs at bottom foreground
+ drawLegs(195,568,1.05,57,'#c68d6a','#151515',legs.left,legs.right,true);
+ // UI visual hint
+ x.fillStyle='#ffffffbb';x.font='bold 10px system-ui';x.textAlign='center';x.fillText('ADVERSAIRE',195,82);
+ x.fillStyle='#ff6500';x.font='900 14px system-ui';x.fillText('FOOTDUAL',195,40);
+ if(flash>0){x.fillStyle=`rgba(255,101,0,${flash*.35})`;x.fillRect(0,0,W,H);}
+}
+function update(dt){
+ if(!active)return;
+ remaining-=dt;if(remaining<=0){remaining=0;$('time').textContent=0;active=false;over=true;$('overlay').classList.remove('hidden');$('overlay').querySelector('h2').textContent=playerScore>cpuScore?'VICTOIRE FOOTDUAL !':playerScore<cpuScore?'LE CPU GAGNE':'ÉGALITÉ !';$('overlay').querySelector('p').textContent=`Score final : ${playerScore} – ${cpuScore}. Prêt pour une revanche ?`;return;}
+ $('time').textContent=Math.ceil(remaining);
+ legs.left=Math.max(0,legs.left-dt*3.0);legs.right=Math.max(0,legs.right-dt*3.0);legs.cpuL=Math.max(0,legs.cpuL-dt*2);legs.cpuR=Math.max(0,legs.cpuR-dt*2);
+ ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;ball.vx*=Math.pow(.985,dt*60);ball.vy*=Math.pow(.99,dt*60);
+ // bounce off tapered sides
+ const half=85+(ball.y-110)*.205;
+ if(ball.x<195-half+9){ball.x=195-half+9;ball.vx=Math.abs(ball.vx)*.7;}
+ if(ball.x>195+half-9){ball.x=195+half-9;ball.vx=-Math.abs(ball.vx)*.7;}
+ // CPU moves legs toward ball and occasionally kicks it back
+ aiCooldown-=dt;
+ if(ball.y<265&&aiCooldown<=0){
+   legs.cpuL=ball.x<195?.3:0;legs.cpuR=ball.x>=195?.3:0;
+   if(Math.abs(ball.x-195)<56){ball.vy=Math.abs(ball.vy)+240;ball.vx+=(195-ball.x)*1.3;say('Le CPU renvoie le ballon !');}
+   else {ball.vx+=(195-ball.x)*.25;ball.vy=Math.abs(ball.vy)+130;}
+   aiCooldown=1.0+Math.random()*.6;
+ }
+ // Scoring gates: passing between opponent legs at far end = player's goal.
+ if(ball.y<178){if(Math.abs(ball.x-195)<49){score('you');return;}else{ball.vy=Math.abs(ball.vy)*.75;ball.y=180;}}
+ // ball goes through user's leg gap = CPU goal
+ if(ball.y>555){if(Math.abs(ball.x-195)<48){score('cpu');return;}else{ball.vy=-Math.abs(ball.vy)*.7;ball.y=552;}}
+ if(flash>0)flash-=dt;
+}
+function frame(t){if(!last)last=t;const dt=Math.min(.035,(t-last)/1000);last=t;update(dt);draw();requestAnimationFrame(frame);}
+
+// Toucher directement les jambes dans l'image déclenche le tir correspondant.
+// Coordonnées converties depuis l'écran vers le canvas pour iPhone et autres écrans.
+function tapCanvas(e){
+  if(!active) return;
+  e.preventDefault();
+  const rect=c.getBoundingClientRect();
+  const px=(e.clientX-rect.left)*W/rect.width;
+  const py=(e.clientY-rect.top)*H/rect.height;
+  // Les jambes du joueur sont au premier plan : pied gauche à gauche, pied droit à droite.
+  if(py>440 && px<195) kick('left');
+  else if(py>440 && px>=195) kick('right');
+  else if(py>290 && py<=440) kick('center');
+  else if(py<=290) {
+    // Permet de jouer en tapant près du ballon ou en haut du terrain.
+    if(Math.hypot(px-ball.x,py-ball.y)<85) kick(px<195?'left':'right');
+  }
+}
+// iPhone/iPad: handle native touch events directly. In some iOS file previews,
+// preventing touchstart suppresses the synthetic pointer event, so do not rely on it.
+c.addEventListener('touchstart',e=>{
+  if(!active || !e.changedTouches || !e.changedTouches.length) return;
+  if(e.cancelable) e.preventDefault();
+  const t=e.changedTouches[0];
+  tapCanvas({clientX:t.clientX,clientY:t.clientY,preventDefault:()=>{}});
+},{passive:false});
+c.addEventListener('pointerdown',e=>{
+  // Touch is handled above; pointer events remain for mouse/pen.
+  if(e.pointerType!=='touch') tapCanvas(e);
+},{passive:false});
+requestAnimationFrame(frame);
+})();
+</script></body></html>
